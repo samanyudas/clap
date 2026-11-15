@@ -37,5 +37,9 @@ name = "rustup"
 harness = false
 name = "ripgrep"
 
+[[bench]]
+harness = false
+name = "global_args"
+
 [lints]
 workspace = true
