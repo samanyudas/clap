@@ -177,6 +177,25 @@ For more information, try '--help'.
 }
 
 #[test]
+#[cfg(feature = "suggestions")]
+#[cfg(feature = "error-context")]
+fn subcmd_did_you_mean_output_arg_global_setting() {
+    static EXPECTED: &str = "\
+error: unexpected argument '--hel' found
+
+Usage: dym [COMMAND]
+
+For more information, try 'help'.
+";
+
+    let cmd = Command::new("dym")
+        .disable_help_flag(true)
+        .subcommand(Command::new("subcmd"));
+
+    utils::assert_output(cmd, "dym --hel subcmd", EXPECTED, true);
+}
+
+#[test]
 fn alias_help() {
     let m = Command::new("myprog")
         .subcommand(Command::new("test").alias("do-stuff"))
