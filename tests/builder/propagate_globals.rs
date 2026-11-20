@@ -1,4 +1,4 @@
-use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, error::ErrorKind};
 
 fn get_app() -> Command {
     Command::new("myprog")
@@ -150,4 +150,158 @@ fn global_flag_2x_used_inner() {
     assert!(top_can_access_flag(&m, true, 2));
     assert!(inner_can_access_flag(&m, true, 2));
     assert!(outer_can_access_flag(&m, true, 2));
+}
+
+fn get_app_with_unused_subcommand() -> Command {
+    get_app()
+        .version("1.0")
+        .propagate_version(true)
+        .subcommand(Command::new("unused"))
+}
+
+fn has_global_arg(cmd: &Command) -> bool {
+    cmd.get_arguments().any(|a| a.get_id() == "GLOBAL_ARG")
+}
+
+#[test]
+fn unused_subcommand_after_parse() {
+    let mut cmd = get_app_with_unused_subcommand();
+    cmd.try_get_matches_from_mut(["myprog", "outer"]).unwrap();
+
+    let outer = cmd.find_subcommand("outer").unwrap();
+    assert!(has_global_arg(outer));
+    assert_eq!(outer.get_version(), Some("1.0"));
+
+    let unused = cmd.find_subcommand("unused").unwrap();
+    assert!(!has_global_arg(unused));
+    assert_eq!(unused.get_version(), None);
+}
+
+#[test]
+fn unused_subcommand_after_build() {
+    let mut cmd = get_app_with_unused_subcommand();
+    cmd.try_get_matches_from_mut(["myprog", "outer"]).unwrap();
+    cmd.build();
+
+    let unused = cmd.find_subcommand("unused").unwrap();
+    assert!(has_global_arg(unused));
+    assert_eq!(unused.get_version(), Some("1.0"));
+}
+
+#[test]
+fn global_positional_with_subcommand_positional() {
+    let m = Command::new("myprog")
+        .arg(Arg::new("global").global(true))
+        .subcommand(Command::new("outer").arg(Arg::new("local")))
+        .try_get_matches_from(["myprog", "outer", "first", "second"])
+        .unwrap();
+
+    let m = m.subcommand_matches("outer").unwrap();
+    assert_eq!(
+        m.get_one::<String>("local").map(String::as_str),
+        Some("first")
+    );
+    assert_eq!(
+        m.get_one::<String>("global").map(String::as_str),
+        Some("second")
+    );
+}
+
+#[test]
+fn global_arg_ignores_parent_local_settings() {
+    let res = Command::new("myprog")
+        .allow_negative_numbers(true)
+        .arg(Arg::new("num").long("num").global(true))
+        .subcommand(Command::new("outer"))
+        .try_get_matches_from(["myprog", "outer", "--num", "-1"]);
+
+    assert!(res.is_err());
+}
+
+#[test]
+fn deferred_global_setting_after_build() {
+    let mut cmd = Command::new("myprog").infer_subcommands(true).subcommand(
+        Command::new("outer")
+            .defer(|cmd| cmd.infer_subcommands(false))
+            .subcommand(Command::new("inner")),
+    );
+    cmd.build();
+
+    let res = cmd.try_get_matches_from_mut(["myprog", "outer", "inn"]);
+    assert!(res.is_err());
+}
+
+#[test]
+fn unused_subcommand_help_after_parse() {
+    let mut cmd = get_app_with_unused_subcommand();
+    cmd.try_get_matches_from_mut(["myprog", "outer"]).unwrap();
+
+    let help = cmd
+        .find_subcommand_mut("unused")
+        .unwrap()
+        .render_help()
+        .to_string();
+    assert!(help.contains("--global-arg"), "{help}");
+
+    let m = cmd
+        .try_get_matches_from_mut(["myprog", "unused", "--global-arg", "some_value"])
+        .unwrap();
+    let m = m.subcommand_matches("unused").unwrap();
+    assert_eq!(
+        m.get_one::<String>("GLOBAL_ARG").map(String::as_str),
+        Some("some_value")
+    );
+}
+
+#[test]
+fn unused_subcommand_change_after_lookup() {
+    let mut cmd = get_app_with_unused_subcommand().disable_help_flag(true);
+    cmd.try_get_matches_from_mut(["myprog", "outer"]).unwrap();
+
+    let unused = cmd.find_subcommand_mut("unused").unwrap();
+    *unused = std::mem::take(unused).disable_help_flag(false);
+
+    let res = cmd
+        .find_subcommand_mut("unused")
+        .unwrap()
+        .try_get_matches_from_mut(["unused", "--help"]);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::DisplayHelp);
+}
+
+#[test]
+fn mut_unused_subcommand_after_parse() {
+    let mut cmd = get_app_with_unused_subcommand();
+    cmd.try_get_matches_from_mut(["myprog", "outer"]).unwrap();
+
+    let mut cmd = cmd.mut_subcommand("unused", |sc| {
+        sc.mut_arg("GLOBAL_ARG", |a| a.long("renamed-global-arg"))
+    });
+    let m = cmd
+        .try_get_matches_from_mut(["myprog", "unused", "--renamed-global-arg", "some_value"])
+        .unwrap();
+    let m = m.subcommand_matches("unused").unwrap();
+    assert_eq!(
+        m.get_one::<String>("GLOBAL_ARG").map(String::as_str),
+        Some("some_value")
+    );
+}
+
+#[test]
+fn unused_subcommand_cloned_into_new_parent() {
+    let mut cmd = get_app_with_unused_subcommand();
+    cmd.try_get_matches_from_mut(["myprog", "outer"]).unwrap();
+    let unused = cmd.find_subcommand_mut("unused").unwrap().clone();
+
+    let m = Command::new("other")
+        .arg(
+            Arg::new("OTHER_GLOBAL")
+                .long("other-global")
+                .global(true)
+                .action(ArgAction::SetTrue),
+        )
+        .subcommand(unused)
+        .try_get_matches_from(["other", "unused", "--other-global"])
+        .unwrap();
+    let m = m.subcommand_matches("unused").unwrap();
+    assert!(m.get_flag("OTHER_GLOBAL"));
 }
