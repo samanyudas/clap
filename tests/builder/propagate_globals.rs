@@ -173,8 +173,8 @@ fn unused_subcommand_after_parse() {
     assert_eq!(outer.get_version(), Some("1.0"));
 
     let unused = cmd.find_subcommand("unused").unwrap();
-    assert!(has_global_arg(unused));
-    assert_eq!(unused.get_version(), Some("1.0"));
+    assert!(!has_global_arg(unused));
+    assert_eq!(unused.get_version(), None);
 }
 
 #[test]
