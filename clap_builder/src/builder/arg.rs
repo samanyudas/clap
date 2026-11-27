@@ -4624,6 +4624,36 @@ impl Arg {
         }
     }
 
+    pub(crate) fn _reset_command_settings(&mut self) {
+        if self.settings.is_set(ArgSettings::AutoIndex) {
+            self.index = None;
+            self.settings.unset(ArgSettings::AutoIndex);
+        }
+        for (inherited, setting) in [
+            (
+                ArgSettings::InheritedHidePossibleValues,
+                ArgSettings::HidePossibleValues,
+            ),
+            (
+                ArgSettings::InheritedAllowHyphenValues,
+                ArgSettings::AllowHyphenValues,
+            ),
+            (
+                ArgSettings::InheritedAllowNegativeNumbers,
+                ArgSettings::AllowNegativeNumbers,
+            ),
+            (
+                ArgSettings::InheritedTrailingVarArg,
+                ArgSettings::TrailingVarArg,
+            ),
+        ] {
+            if self.settings.is_set(inherited) {
+                self.settings.unset(setting);
+                self.settings.unset(inherited);
+            }
+        }
+    }
+
     // Used for positionals when printing
     pub(crate) fn name_no_brackets(&self) -> String {
         debug!("Arg::name_no_brackets:{}", self.get_id());

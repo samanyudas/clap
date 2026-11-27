@@ -61,6 +61,11 @@ pub(crate) enum ArgSettings {
     HiddenShortHelp,
     HiddenLongHelp,
     Exclusive,
+    AutoIndex,
+    InheritedHidePossibleValues,
+    InheritedAllowHyphenValues,
+    InheritedAllowNegativeNumbers,
+    InheritedTrailingVarArg,
 }
 
 impl ArgSettings {
